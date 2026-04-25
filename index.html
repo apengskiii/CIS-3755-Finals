@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Automation Risk</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 { margin-bottom: 5px; }
+
+    p.subtitle {
+      color: #555;
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .nav { margin-bottom: 20px; }
+
+    /* nav buttons to switch between the three visualizations */
+    .nav button {
+      margin-right: 8px;
+      padding: 6px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .nav button.active {
+      background-color: #333;
+      color: white;
+    }
+
+    /* hide all sections by default, only show the active one */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    .bar-controls { margin-bottom: 12px; }
+
+    /* toggle buttons for highest/lowest risk */
+    .bar-controls button {
+      margin-right: 8px;
+      padding: 5px 12px;
+      cursor: pointer;
+    }
+
+    .bar-controls button.active {
+      background-color: #333;
+      color: white;
+    }
+
+    /* tooltip that follows the mouse on hover */
+    #tooltip {
+      display: none;
+      position: fixed;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+      font-size: 13px;
+      pointer-events: none;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
+    }
+
+    /* search input for the lookup table */
+    input#search {
+      padding: 6px 10px;
+      font-size: 14px;
+      width: 300px;
+      margin-bottom: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    /* sortable column headers */
+    th {
+      background-color: #333;
+      color: white;
+      padding: 8px 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    th:hover { background-color: #555; }
+
+    td {
+      padding: 7px 12px;
+      border-bottom: 1px solid #ddd;
+      font-size: 13px;
+    }
+
+    tr:hover td { background-color: #f5f5f5; }
+
+    /* risk level badges: red = high, orange = medium, green = low */
+    .badge {
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .badge-high { background-color: #ffcccc; color: #990000; }
+    .badge-med  { background-color: #ffe5cc; color: #884400; }
+    .badge-low  { background-color: #ccffdd; color: #006622; }
+
+    .pagination { margin-top: 10px; }
+
+    /* pagination buttons for the lookup table */
+    .pagination button {
+      margin-right: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+
+    .pagination button.active {
+      background-color: #333;
+      color: white;
+    }
+
+    .legend {
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-block;
+      margin-right: 16px;
+    }
+
+    .legend-swatch {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .axis-label { font-size: 12px; }
+  </style>
+</head>
+
+<body>
+
+<h1>Automation Risk</h1>
+<p class="subtitle">Exploring automation risk across 291 US occupations &mdash; Bezuidenhout, W&ouml;cke &amp; Plint (2019)</p>
+
+<!-- navigation buttons -->
+<div class="nav">
+  <button class="active" onclick="showSection('barchart', this)">Bar Chart</button>
+  <button onclick="showSection('scatter', this)">Scatter Plot</button>
+  <button onclick="showSection('lookup', this)">Occupation Lookup</button>
+</div>
+
+<!-- BAR CHART SECTION -->
+<div id="barchart" class="section active">
+  <h2>Top Occupations by Automation Risk</h2>
+  <div class="bar-controls">
+    <button class="active" onclick="showBars('top', this)">Highest Risk (50)</button>
+    <button onclick="showBars('bottom', this)">Lowest Risk (50)</button>
+  </div>
+  <svg id="bar-svg" width="900" height="1100"></svg>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:#cc0000"></span>High (&ge;80%)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#ff8800"></span>Medium (40&ndash;79%)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#009944"></span>Low (&lt;40%)</span>
+  </div>
+</div>
+
+<!-- SCATTER PLOT SECTION -->
+<div id="scatter" class="section">
+  <h2>Routineness vs. Complexity</h2>
+  <p style="color:#555; font-size:14px; line-height:1.6">
+    <b>X-axis (Routineness):</b> how repetitive and rule-based a job is (0 = not routine, 1 = fully routine).<br>
+    <b>Y-axis (Complexity):</b> how much a job requires judgment and expertise (0 = simple, 1 = highly complex).<br>
+    <b>Dot size</b> reflects automation probability &mdash; bigger dots have higher risk. <br>
+    <b>Color</b> shows risk level.<br>
+    Jobs in the <b>bottom-right</b> (high routine, low complex) tend to have the highest automation risk.<br>
+    Jobs in the <b>top-left</b> (low routine, high complex) tend to be the safest from automation.<br><br>
+    <b>Hover over any dot for details.</b>
+  </p>
+  <svg id="scatter-svg" width="900" height="700"></svg>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:#cc0000;border-radius:50%"></span>High (&ge;80%)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#ff8800;border-radius:50%"></span>Medium (40&ndash;79%)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#009944;border-radius:50%"></span>Low (&lt;40%)</span>
+  </div>
+</div>
+
+<!-- LOOKUP TABLE SECTION -->
+<div id="lookup" class="section">
+  <h2>Occupation Lookup</h2>
+  <input type="text" id="search" placeholder="Search occupation..." oninput="filterTable()">
+  <table>
+    <thead>
+      <tr>
+        <!-- clicking a header sorts the table by that column -->
+        <th onclick="sortTable('occupation')">Occupation &#8597;</th>
+        <th onclick="sortTable('pauto')">Risk % &#8597;</th>
+        <th onclick="sortTable('routineness')">Routineness &#8597;</th>
+        <th onclick="sortTable('complexity')">Complexity &#8597;</th>
+        <th>Risk Level</th>
+      </tr>
+    </thead>
+    <tbody id="table-body"></tbody>
+  </table>
+  <div class="pagination" id="pagination"></div>
+  <p id="table-count" style="font-size:13px; color:#555; margin-top:8px"></p>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// global variables
+var allData = [];       // full dataset loaded from CSV
+var barMode = 'top';   // current bar chart mode: 'top' or 'bottom'
+var tableFiltered = []; // currently filtered/sorted rows for the table
+var sortKey = 'pauto'; // default sort column
+var sortDir = -1;      // -1 = descending, 1 = ascending
+var currentPage = 1;   // current page in the lookup table
+var perPage = 20;      // rows per page
+var scatterDrawn = false; // flag so scatter only renders once
+
+// load CSV and typecast all numeric columns
+d3.csv("automation_data.csv").then(function(data) {
+  data.forEach(function(d) {
+    d.id          = +d.id;
+    d.pauto       = +d.pauto;
+    d.routineness = +d.routineness;
+    d.complexity  = +d.complexity;
+    d.stratum     = +d.stratum;
+  });
+  allData = data;
+  renderBarchart(); // draw bar chart on load
+  tableFiltered = allData.slice().sort(function(a,b) { return b.pauto - a.pauto; });
+  renderTable();    // populate lookup table on load
+});
+
+// returns bar/dot color based on automation probability
+function riskColor(p) {
+  return p >= 0.8 ? "#cc0000" : p >= 0.4 ? "#ff8800" : "#009944";
+}
+
+// returns risk label string
+function riskLabel(p) {
+  return p >= 0.8 ? "HIGH" : p >= 0.4 ? "MED" : "LOW";
+}
+
+// returns CSS class for the badge in the table
+function badgeClass(p) {
+  return p >= 0.8 ? "badge-high" : p >= 0.4 ? "badge-med" : "badge-low";
+}
+
+// shows the selected section and hides the others
+function showSection(id, btn) {
+  document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.nav button').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+  // only draw the scatter plot the first time it's visited
+  if (id === 'scatter' && !scatterDrawn) {
+    renderScatter();
+    scatterDrawn = true;
+  }
+}
+
+// switches bar chart between highest and lowest risk
+function showBars(mode, btn) {
+  barMode = mode;
+  document.querySelectorAll('.bar-controls button').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderBarchart();
+}
+
+// draws the horizontal bar chart
+function renderBarchart() {
+  if (!allData.length) return;
+
+  // sort and slice top or bottom 50
+  var sorted = allData.slice().sort(function(a,b) { return b.pauto - a.pauto; });
+  var items = barMode === 'top' ? sorted.slice(0, 50) : sorted.slice(-50).reverse();
+
+  var svg = d3.select("#bar-svg");
+  svg.selectAll("*").remove(); // clear previous chart before redrawing
+
+  var margin = { top: 10, right: 60, bottom: 20, left: 310 };
+  var width  = +svg.attr("width")  - margin.left - margin.right;
+  var height = +svg.attr("height") - margin.top  - margin.bottom;
+
+  var g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // x scale: automation probability (0 to 1)
+  var x = d3.scaleLinear().domain([0, 1]).range([0, width]);
+
+  // y scale: one band per occupation
+  var y = d3.scaleBand()
+    .domain(items.map(function(d) { return d.occupation; }))
+    .range([0, height])
+    .padding(0.2);
+
+  // draw bars
+  g.selectAll("rect")
+    .data(items)
+    .join("rect")
+    .attr("x", 0)
+    .attr("y", function(d) { return y(d.occupation); })
+    .attr("width", function(d) { return x(d.pauto); })
+    .attr("height", y.bandwidth())
+    .attr("fill", function(d) { return riskColor(d.pauto); })
+    .on("mouseover", function(event, d) {
+      d3.select(this).attr("opacity", 0.75);
+      showTooltip(event, d);
+    })
+    .on("mousemove", function(event) { moveTooltip(event); })
+    .on("mouseleave", function() {
+      d3.select(this).attr("opacity", 1);
+      hideTooltip();
+    });
+
+  // percentage labels at the end of each bar
+  g.selectAll(".bar-label")
+    .data(items)
+    .join("text")
+    .attr("class", "bar-label")
+    .attr("x", function(d) { return x(d.pauto) + 4; })
+    .attr("y", function(d) { return y(d.occupation) + y.bandwidth() / 2 + 4; })
+    .attr("font-size", "11px")
+    .text(function(d) { return Math.round(d.pauto * 100) + "%"; });
+
+  // y axis with occupation names
+  g.append("g")
+    .call(d3.axisLeft(y).tickSize(0))
+    .call(function(g) { g.select(".domain").remove(); });
+
+  g.selectAll(".tick text").attr("font-size", "11px");
+}
+
+// draws the scatter plot (routineness vs complexity)
+function renderScatter() {
+  var svg = d3.select("#scatter-svg");
+  svg.selectAll("*").remove();
+
+  var margin = { top: 30, right: 30, bottom: 60, left: 60 };
+  var width  = +svg.attr("width")  - margin.left - margin.right;
+  var height = +svg.attr("height") - margin.top  - margin.bottom;
+
+  var g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  // x scale: routineness (0 to 1)
+  var x = d3.scaleLinear().domain([0, 1]).range([0, width]);
+  // y scale: complexity (0 to 1), inverted so 1 is at the top
+  var y = d3.scaleLinear().domain([0, 1]).range([height, 0]);
+
+  // horizontal grid lines
+  g.append("g")
+    .attr("stroke", "#ddd")
+    .call(d3.axisLeft(y).ticks(5).tickSize(-width))
+    .call(function(g) { g.select(".domain").remove(); g.selectAll("text").remove(); });
+
+  // vertical grid lines
+  g.append("g")
+    .attr("stroke", "#ddd")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(x).ticks(5).tickSize(-height))
+    .call(function(g) { g.select(".domain").remove(); g.selectAll("text").remove(); });
+
+  // sort so low-risk dots render first and high-risk dots appear on top
+  var sorted = allData.slice().sort(function(a,b) { return a.pauto - b.pauto; });
+
+  // draw one circle per occupation
+  g.selectAll("circle")
+    .data(sorted)
+    .join("circle")
+    .attr("cx", function(d) { return x(d.routineness); })
+    .attr("cy", function(d) { return y(d.complexity); })
+    .attr("r",  function(d) { return 3 + d.pauto * 7; }) // dot size = automation probability
+    .attr("fill", function(d) { return riskColor(d.pauto); })
+    .attr("opacity", 0.7)
+    .on("mouseover", function(event, d) {
+      d3.select(this).attr("stroke", "black").attr("stroke-width", 1.5);
+      showTooltip(event, d);
+    })
+    .on("mousemove", function(event) { moveTooltip(event); })
+    .on("mouseleave", function() {
+      d3.select(this).attr("stroke", "none");
+      hideTooltip();
+    });
+
+  // x and y axes
+  g.append("g")
+    .attr("transform", "translate(0," + height + ")")
+    .call(d3.axisBottom(x).ticks(5));
+
+  g.append("g")
+    .call(d3.axisLeft(y).ticks(5));
+
+  // axis title labels
+  g.append("text")
+    .attr("class", "axis-label")
+    .attr("x", width / 2)
+    .attr("y", height + 45)
+    .attr("text-anchor", "middle")
+    .text("Routineness");
+
+  g.append("text")
+    .attr("class", "axis-label")
+    .attr("x", -height / 2)
+    .attr("y", -45)
+    .attr("text-anchor", "middle")
+    .attr("transform", "rotate(-90)")
+    .text("Complexity");
+}
+
+// shows the tooltip with occupation details
+function showTooltip(event, d) {
+  var tt = document.getElementById("tooltip");
+  tt.style.display = "block";
+  tt.innerHTML =
+    "<b>" + d.occupation + "</b><br>" +
+    "Automation Risk: " + Math.round(d.pauto * 100) + "% (" + riskLabel(d.pauto) + ")<br>" +
+    "Routineness: " + d.routineness.toFixed(3) + "<br>" +
+    "Complexity: " + d.complexity.toFixed(3) + "<br>" +
+    "Stratum: " + d.stratum;
+  moveTooltip(event);
+}
+
+// moves tooltip to follow the mouse, flips left if near right edge
+function moveTooltip(event) {
+  var tt = document.getElementById("tooltip");
+  var x = event.clientX + 14;
+  var y = event.clientY - 10;
+  if (x + 260 > window.innerWidth) x = event.clientX - 270;
+  tt.style.left = x + "px";
+  tt.style.top  = y + "px";
+}
+
+// hides the tooltip
+function hideTooltip() {
+  document.getElementById("tooltip").style.display = "none";
+}
+
+// filters the table based on the search input
+function filterTable() {
+  var q = document.getElementById("search").value.toLowerCase();
+  tableFiltered = allData.filter(function(d) {
+    return d.occupation.toLowerCase().includes(q);
+  });
+  tableFiltered.sort(function(a,b) {
+    return (a[sortKey] < b[sortKey] ? -1 : 1) * sortDir;
+  });
+  currentPage = 1;
+  renderTable();
+}
+
+// sorts the table by the clicked column, toggles direction if clicked again
+function sortTable(key) {
+  if (sortKey === key) { sortDir *= -1; }
+  else { sortKey = key; sortDir = key === 'occupation' ? 1 : -1; }
+  filterTable();
+}
+
+// renders the current page of the table
+function renderTable() {
+  var start = (currentPage - 1) * perPage;
+  var slice = tableFiltered.slice(start, start + perPage);
+
+  document.getElementById("table-body").innerHTML = slice.map(function(d) {
+    return "<tr>" +
+      "<td>" + d.occupation + "</td>" +
+      "<td>" + Math.round(d.pauto * 100) + "%</td>" +
+      "<td>" + d.routineness.toFixed(2) + "</td>" +
+      "<td>" + d.complexity.toFixed(2) + "</td>" +
+      "<td><span class='badge " + badgeClass(d.pauto) + "'>" + riskLabel(d.pauto) + "</span></td>" +
+      "</tr>";
+  }).join("");
+
+  var total = tableFiltered.length;
+  var pages = Math.ceil(total / perPage);
+  document.getElementById("table-count").textContent =
+    "Showing " + Math.min(start + 1, total) + "\u2013" + Math.min(start + perPage, total) + " of " + total + " occupations";
+
+  // build pagination buttons
+  var pg = document.getElementById("pagination");
+  pg.innerHTML = "";
+
+  var prevBtn = document.createElement("button");
+  prevBtn.textContent = "\u2190";
+  prevBtn.disabled = currentPage === 1;
+  prevBtn.onclick = function() { currentPage--; renderTable(); };
+  pg.appendChild(prevBtn);
+
+  for (var i = Math.max(1, currentPage - 2); i <= Math.min(pages, currentPage + 2); i++) {
+    (function(i) {
+      var btn = document.createElement("button");
+      btn.textContent = i;
+      if (i === currentPage) btn.classList.add("active");
+      btn.onclick = function() { currentPage = i; renderTable(); };
+      pg.appendChild(btn);
+    })(i);
+  }
+
+  var nextBtn = document.createElement("button");
+  nextBtn.textContent = "\u2192";
+  nextBtn.disabled = currentPage >= pages;
+  nextBtn.onclick = function() { currentPage++; renderTable(); };
+  pg.appendChild(nextBtn);
+}
+</script>
+
+</body>
+</html>
